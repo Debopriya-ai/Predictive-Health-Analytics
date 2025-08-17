@@ -630,5 +630,4 @@ with bottom_row:
 
                 except Exception as e:
                     st.error(f"Error communicating with the health coach: {e}")
-
                     st.session_state.messages.append({"role": "assistant", "content": "I'm sorry, I'm having trouble connecting right now. Please try again later."})
