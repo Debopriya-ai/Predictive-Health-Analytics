@@ -15,10 +15,6 @@ from groq import Groq
 st.set_page_config(
     page_title="Health Analyzer App",
     layout="wide",
-    backgroundColor = "white",
-    primaryColor = "#000080",
-    secondaryBackgroundColor = "#50C878",
-    textColor = "#262730",
     initial_sidebar_state="expanded",
     page_icon="💪",
     menu_items={
