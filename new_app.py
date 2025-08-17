@@ -15,6 +15,10 @@ from groq import Groq
 st.set_page_config(
     page_title="Health Analyzer App",
     layout="wide",
+    backgroundColor = "white"
+    primaryColor = "#000080"
+    secondaryBackgroundColor = "#50C878"
+    textColor = "#262730"
     initial_sidebar_state="expanded",
     page_icon="💪",
     menu_items={
@@ -631,5 +635,6 @@ with bottom_row:
                 except Exception as e:
                     st.error(f"Error communicating with the health coach: {e}")
                     st.session_state.messages.append({"role": "assistant", "content": "I'm sorry, I'm having trouble connecting right now. Please try again later."})
+
 
 
