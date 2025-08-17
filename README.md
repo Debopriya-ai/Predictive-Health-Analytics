@@ -65,10 +65,15 @@ Provides actionable diet and lifestyle suggestions
 
 Fully deployed locally via Streamlit with simple setup instructions
 
-pip freeze > requirements.txt
-
-
 ```bash
+
+streamlit==1.26.0
+pandas==2.2.1
+numpy==1.26.0
+scikit-learn==1.3.2
+fpdf==1.7.2
+plotly==5.20.0
+requests==2.31.0
 
 
 gne <your-repo-url>
