@@ -68,6 +68,7 @@ Fully deployed locally via Streamlit with simple setup instructions
 ```bash
 
 streamlit==1.26.0
+scikit-learn==1.3.2
 pandas==2.2.1
 numpy==1.26.0
 scikit-learn==1.3.2
