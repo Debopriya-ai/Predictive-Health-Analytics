@@ -352,7 +352,7 @@ with top_row:
     st.markdown("<h1 style='text-align: center;font-size: 4.0rem;'>Comprehensive Health Analytics Platform</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 8, 1])
     with col2:
-        st.image("https://github.com//Debopriya-ai//Predictive-Health-Analytics//blob//main//img_final.png", use_container_width=True)
+        st.image("img_final.png", use_container_width=True)
 
     st.markdown("## Welcome to Your Health Analyzer")
     st.markdown("<h3>Track. Understand. Improve.</h3>", unsafe_allow_html=True)
@@ -631,4 +631,5 @@ with bottom_row:
                 except Exception as e:
                     st.error(f"Error communicating with the health coach: {e}")
                     st.session_state.messages.append({"role": "assistant", "content": "I'm sorry, I'm having trouble connecting right now. Please try again later."})
+
 
