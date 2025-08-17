@@ -65,6 +65,9 @@ Provides actionable diet and lifestyle suggestions
 
 Fully deployed locally via Streamlit with simple setup instructions
 
+pip freeze > requirements.txt
+
+
 ```bash
 
 
