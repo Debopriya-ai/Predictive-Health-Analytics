@@ -79,3 +79,5 @@ requests==2.31.0
 
 gne <your-repo-url>
 cd <repo-folder>
+
+Link to the app: https://predictive-health-analytics-copyright.streamlit.app
