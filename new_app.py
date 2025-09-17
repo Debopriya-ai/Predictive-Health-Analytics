@@ -316,8 +316,8 @@ def generate_custom_meal_plans(target_calories, target_protein, target_fat, targ
 
     return plans
 # --- Nutritionix API details (replace with your credentials if needed) ---
-NUTRITIONIX_APP_ID = "0afb1157"
-NUTRITIONIX_API_KEY = "99be0e39954a5b45ecdf7a6399c8379d"
+NUTRITIONIX_APP_ID = st.secrets["N_ID"]
+NUTRITIONIX_API_KEY = st.secrets["N_KY"]
 NUTRITIONIX_API_URL = "https://trackapi.nutritionix.com/v2/natural/nutrients"
 
 # --- App navigation & header content ---
@@ -722,6 +722,7 @@ with bottom_row:
                         else: 
                             st.error("An error occurred while analyzing the image. Please try again later.")
                         st.info("Ensure the uploaded image is a clear DEXA scan and try again.")
+
 
 
 
