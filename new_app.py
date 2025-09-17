@@ -15,7 +15,6 @@ from groq import Groq
 st.set_page_config(
     page_title="Health Analyzer App",
     layout="wide",
-    initial_sidebar_state="expanded",
     page_icon="💪",
     menu_items={
         'Get help': 'https://streamlit.io',
@@ -33,10 +32,11 @@ except KeyError:
 
 # Initialize the Groq client
 client = Groq(api_key=groq_api_key)
-# Choose a fast model from Groq
-GROQ_MODEL = "llama3-8b-8192"
 
-# Loading dataset
+# Choose models
+GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"                 # text-only
+GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"  # vision (for DEXA scans)
+# --- Loading dataset ---
 @st.cache_data
 def load_data():
     try:
@@ -66,16 +66,17 @@ def load_data():
 
 df = load_data()
 
+# --- Features for clustering ---
 features = ["Age", "Gender_num", "Calories_per_day", "Steps_per_day", "Alcohol_grams_per_day", "Smoker"]
 imputer = SimpleImputer(strategy='mean')
 X_imputed = pd.DataFrame(imputer.fit_transform(df[features]), columns=features)
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X_imputed)
 
+# --- KMeans clustering model ---
 kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
 kmeans.fit(X_scaled)
 cluster_map = {0: "Moderate Risk", 1: "Low Risk", 2: "High Risk"}
-
 # --- Helper functions ---
 def get_recommendations(data):
     tips = []
@@ -157,8 +158,7 @@ def generate_pdf(user_input, risk, tips):
         base64_pdf = base64.b64encode(f.read()).decode('utf-8')
         pdf_display = f'<a href="data:application/pdf;base64,{base64_pdf}" download="Health_Report.pdf">Download your personalized health report</a>'
         st.markdown(pdf_display, unsafe_allow_html=True)
-
-# Calorie & Diet Planner helpers
+# --- Calorie & Diet Planner helpers ---
 def calculate_bmr(weight, height, age, gender):
     if gender == "Male":
         bmr = 10 * weight + 6.25 * height - 5 * age + 5
@@ -176,7 +176,7 @@ def calculate_tdee(bmr, activity_level):
     }
     return bmr * activity_multipliers.get(activity_level, 1.2)
 
-# GLOBAL DICTIONARY: Moved here so it's accessible everywhere
+# --- Global Food Database ---
 food_db = {
     "oatmeal": {"protein": 4.0, "fat": 3.0, "carbs": 27.0, "calories": 150},
     "greek_yogurt": {"protein": 10.0, "fat": 0.0, "carbs": 4.0, "calories": 59},
@@ -200,151 +200,133 @@ food_db = {
     "protein_shake": {"protein": 28.0, "fat": 8.0, "carbs": 8.0, "calories": 200},
 }
 
+# --- Meal Plan Generator ---
 def generate_custom_meal_plans(target_calories, target_protein, target_fat, target_carbs):
     plans = {}
     
+    # Always include a protein shake at the end
     shake_macros = food_db["protein_shake"]
     remaining_calories = target_calories - shake_macros["calories"]
     remaining_protein = target_protein - shake_macros["protein"]
     remaining_fat = target_fat - shake_macros["fat"]
     remaining_carbs = target_carbs - shake_macros["carbs"]
 
-    # --- Plan 1: Chicken & Eggs ---
-    plan1_p_dist = [0.25, 0.45, 0.30]
-    plan1_f_dist = [0.20, 0.40, 0.40]
-    plan1_c_dist = [0.25, 0.35, 0.40]
-    
+    # --------------------
+    # Chicken & Eggs Plan
+    # --------------------
     plans["Chicken & Eggs"] = {
         "Meal 1: Breakfast": {
-            "Food": "Oatmeal, Plain Greek Yogurt, 2 Eggs, Mixed Berries",
+            "Food": "Oatmeal, Greek Yogurt, 2 Eggs, Mixed Berries",
             "Weights": {
-                "Oatmeal (cooked)": f"{round((remaining_carbs * plan1_c_dist[0] * 0.4) / food_db['oatmeal']['carbs'] * 100)} g",
-                "Greek Yogurt": f"{round((remaining_protein * plan1_p_dist[0] * 0.4) / food_db['greek_yogurt']['protein'] * 100)} g",
+                "Oatmeal (cooked)": f"{round((remaining_carbs * 0.3) / food_db['oatmeal']['carbs'] * 100)} g",
+                "Greek Yogurt": f"{round((remaining_protein * 0.25) / food_db['greek_yogurt']['protein'] * 100)} g",
                 "Large Eggs": "2 eggs",
-                "Mixed Berries": f"{round((remaining_carbs * plan1_c_dist[0] * 0.4) / food_db['mixed_berries']['carbs'] * 100)} g",
+                "Mixed Berries": f"{round((remaining_carbs * 0.2) / food_db['mixed_berries']['carbs'] * 100)} g",
             }
         },
         "Meal 2: Lunch": {
-            "Food": "Boneless Chicken Breast, Boiled Potatoes, Cooked Spinach, Butter",
+            "Food": "Grilled Chicken Breast, Boiled Potatoes, Cooked Spinach",
             "Weights": {
-                "Chicken Breast": f"{round((remaining_protein * plan1_p_dist[1]) / food_db['chicken_breast']['protein'] * 100)} g",
-                "Boiled Potatoes": f"{round((remaining_carbs * plan1_c_dist[1]) / food_db['boiled_potatoes']['carbs'] * 100)} g",
-                "Cooked Spinach": "150 g",
-                "Butter": f"{round((remaining_fat * plan1_f_dist[1]) / food_db['butter']['fat'] * 100)} g",
+                "Chicken Breast": f"{round((remaining_protein * 0.4) / food_db['chicken_breast']['protein'] * 100)} g",
+                "Boiled Potatoes": f"{round((remaining_carbs * 0.4) / food_db['boiled_potatoes']['carbs'] * 100)} g",
+                "Cooked Spinach": f"{round((remaining_protein * 0.1) / food_db['cooked_spinach']['protein'] * 100)} g",
             }
         },
         "Meal 3: Dinner": {
-            "Food": "Boneless Chicken Breast, Boiled Potatoes, Cooked Green Beans, Butter, Apple",
+            "Food": "Chicken Breast, Cooked Green Beans, Cooked Carrots",
             "Weights": {
-                "Chicken Breast": f"{round((remaining_protein * plan1_p_dist[2]) / food_db['chicken_breast']['protein'] * 100)} g",
-                "Boiled Potatoes": f"{round((remaining_carbs * plan1_c_dist[2] * 0.5) / food_db['boiled_potatoes']['carbs'] * 100)} g",
-                "Cooked Green Beans": "150 g",
-                "Butter": f"{round((remaining_fat * plan1_f_dist[2]) / food_db['butter']['fat'] * 100)} g",
-                "Apple": "1 medium (180 g)"
+                "Chicken Breast": f"{round((remaining_protein * 0.35) / food_db['chicken_breast']['protein'] * 100)} g",
+                "Cooked Green Beans": f"{round((remaining_carbs * 0.2) / food_db['cooked_green_beans']['carbs'] * 100)} g",
+                "Cooked Carrots": f"{round((remaining_carbs * 0.15) / food_db['cooked_carrots']['carbs'] * 100)} g",
             }
         },
         "Last Meal: Protein Shake": {
-            "Food": "Protein shake (2 scoops protein powder + 125ml whole milk)",
+            "Food": "Protein shake (2 scoops protein powder + 125ml milk)",
             "Weights": "N/A"
         }
     }
-    
-    # --- Plan 2: Lean Beef & Eggs ---
-    plan2_p_dist = [0.25, 0.45, 0.30]
-    plan2_f_dist = [0.20, 0.40, 0.40]
-    plan2_c_dist = [0.25, 0.35, 0.40]
 
+    # --------------------
+    # Lean Beef & Eggs Plan
+    # --------------------
     plans["Lean Beef & Eggs"] = {
         "Meal 1: Breakfast": {
-            "Food": "Oatmeal, Plain Greek Yogurt, 2 Eggs, Pear",
+            "Food": "Oatmeal, Banana, 2 Eggs",
             "Weights": {
-                "Oatmeal (cooked)": f"{round((remaining_carbs * plan2_c_dist[0] * 0.4) / food_db['oatmeal']['carbs'] * 100)} g",
-                "Greek Yogurt": f"{round((remaining_protein * plan2_p_dist[0] * 0.4) / food_db['greek_yogurt']['protein'] * 100)} g",
+                "Oatmeal (cooked)": f"{round((remaining_carbs * 0.3) / food_db['oatmeal']['carbs'] * 100)} g",
+                "Banana": f"{round((remaining_carbs * 0.2) / food_db['banana']['carbs'] * 100)} g",
                 "Large Eggs": "2 eggs",
-                "Pear": "1 medium (180 g)",
             }
         },
         "Meal 2: Lunch": {
-            "Food": "Lean Ground Beef, Boiled Potatoes, Cooked Carrots, Butter",
+            "Food": "Lean Ground Beef, Boiled Potatoes, Cooked Cauliflower",
             "Weights": {
-                "Lean Ground Beef": f"{round((remaining_protein * plan2_p_dist[1]) / food_db['lean_ground_beef']['protein'] * 100)} g",
-                "Boiled Potatoes": f"{round((remaining_carbs * plan2_c_dist[1]) / food_db['boiled_potatoes']['carbs'] * 100)} g",
-                "Cooked Carrots": "100 g",
-                "Butter": f"{round((remaining_fat * plan2_f_dist[1]) / food_db['butter']['fat'] * 100)} g",
+                "Lean Ground Beef": f"{round((remaining_protein * 0.4) / food_db['lean_ground_beef']['protein'] * 100)} g",
+                "Boiled Potatoes": f"{round((remaining_carbs * 0.4) / food_db['boiled_potatoes']['carbs'] * 100)} g",
+                "Cooked Cauliflower": f"{round((remaining_carbs * 0.1) / food_db['cooked_cauliflower']['carbs'] * 100)} g",
             }
         },
         "Meal 3: Dinner": {
-            "Food": "Lean Ground Beef, Boiled Potatoes, Cooked Cauliflower, Butter, Orange",
+            "Food": "Lean Ground Beef, Cooked Bell Peppers, Cooked Asparagus",
             "Weights": {
-                "Lean Ground Beef": f"{round((remaining_protein * plan2_p_dist[2]) / food_db['lean_ground_beef']['protein'] * 100)} g",
-                "Boiled Potatoes": f"{round((remaining_carbs * plan2_c_dist[2] * 0.5) / food_db['boiled_potatoes']['carbs'] * 100)} g",
-                "Cooked Cauliflower": "200 g",
-                "Butter": f"{round((remaining_fat * plan2_f_dist[2]) / food_db['butter']['fat'] * 100)} g",
-                "Orange": "1 medium (130 g)"
+                "Lean Ground Beef": f"{round((remaining_protein * 0.35) / food_db['lean_ground_beef']['protein'] * 100)} g",
+                "Cooked Bell Peppers": f"{round((remaining_carbs * 0.2) / food_db['cooked_bell_peppers']['carbs'] * 100)} g",
+                "Cooked Asparagus": f"{round((remaining_carbs * 0.15) / food_db['cooked_asparagus']['carbs'] * 100)} g",
             }
         },
         "Last Meal: Protein Shake": {
-            "Food": "Protein shake (2 scoops protein powder + 125ml whole milk)",
+            "Food": "Protein shake (2 scoops protein powder + 125ml milk)",
             "Weights": "N/A"
         }
     }
 
-    # --- Plan 3: Lean Turkey & Eggs ---
-    plan3_p_dist = [0.25, 0.45, 0.30]
-    plan3_f_dist = [0.20, 0.40, 0.40]
-    plan3_c_dist = [0.25, 0.35, 0.40]
-    
+    # --------------------
+    # Lean Turkey & Eggs Plan
+    # --------------------
     plans["Lean Turkey & Eggs"] = {
         "Meal 1: Breakfast": {
-            "Food": "Oatmeal, Plain Greek Yogurt, 2 Eggs, Banana",
+            "Food": "Oatmeal, Apple, 2 Eggs",
             "Weights": {
-                "Oatmeal (cooked)": f"{round((remaining_carbs * plan3_c_dist[0] * 0.4) / food_db['oatmeal']['carbs'] * 100)} g",
-                "Greek Yogurt": f"{round((remaining_protein * plan3_p_dist[0] * 0.4) / food_db['greek_yogurt']['protein'] * 100)} g",
+                "Oatmeal (cooked)": f"{round((remaining_carbs * 0.3) / food_db['oatmeal']['carbs'] * 100)} g",
+                "Apple": f"{round((remaining_carbs * 0.2) / food_db['apple']['carbs'] * 100)} g",
                 "Large Eggs": "2 eggs",
-                "Banana": "1 medium (118 g)",
             }
         },
         "Meal 2: Lunch": {
-            "Food": "Lean Ground Turkey, Boiled Potatoes, Cooked Bell Peppers, Butter",
+            "Food": "Lean Ground Turkey, Boiled Potatoes, Cooked Spinach",
             "Weights": {
-                "Lean Ground Turkey": f"{round((remaining_protein * plan3_p_dist[1]) / food_db['lean_ground_turkey']['protein'] * 100)} g",
-                "Boiled Potatoes": f"{round((remaining_carbs * plan3_c_dist[1]) / food_db['boiled_potatoes']['carbs'] * 100)} g",
-                "Cooked Bell Peppers": "150 g",
-                "Butter": f"{round((remaining_fat * plan3_f_dist[1]) / food_db['butter']['fat'] * 100)} g",
+                "Lean Ground Turkey": f"{round((remaining_protein * 0.4) / food_db['lean_ground_turkey']['protein'] * 100)} g",
+                "Boiled Potatoes": f"{round((remaining_carbs * 0.4) / food_db['boiled_potatoes']['carbs'] * 100)} g",
+                "Cooked Spinach": f"{round((remaining_protein * 0.1) / food_db['cooked_spinach']['protein'] * 100)} g",
             }
         },
         "Meal 3: Dinner": {
-            "Food": "Lean Ground Turkey, Boiled Potatoes, Cooked Asparagus, Butter, Strawberries",
+            "Food": "Lean Ground Turkey, Cooked Green Beans, Cooked Carrots",
             "Weights": {
-                "Lean Ground Turkey": f"{round((remaining_protein * plan3_p_dist[2]) / food_db['lean_ground_turkey']['protein'] * 100)} g",
-                "Boiled Potatoes": f"{round((remaining_carbs * plan3_c_dist[2] * 0.5) / food_db['boiled_potatoes']['carbs'] * 100)} g",
-                "Cooked Asparagus": "150 g",
-                "Butter": f"{round((remaining_fat * plan3_f_dist[2]) / food_db['butter']['fat'] * 100)} g",
-                "Strawberries": "150 g"
+                "Lean Ground Turkey": f"{round((remaining_protein * 0.35) / food_db['lean_ground_turkey']['protein'] * 100)} g",
+                "Cooked Green Beans": f"{round((remaining_carbs * 0.2) / food_db['cooked_green_beans']['carbs'] * 100)} g",
+                "Cooked Carrots": f"{round((remaining_carbs * 0.15) / food_db['cooked_carrots']['carbs'] * 100)} g",
             }
         },
         "Last Meal: Protein Shake": {
-            "Food": "Protein shake (2 scoops protein powder + 125ml whole milk)",
+            "Food": "Protein shake (2 scoops protein powder + 125ml milk)",
             "Weights": "N/A"
         }
     }
-    
-    return plans
 
-# Nutritionix API details (replace with your credentials)
+    return plans
+# --- Nutritionix API details (replace with your credentials if needed) ---
 NUTRITIONIX_APP_ID = "0afb1157"
 NUTRITIONIX_API_KEY = "99be0e39954a5b45ecdf7a6399c8379d"
 NUTRITIONIX_API_URL = "https://trackapi.nutritionix.com/v2/natural/nutrients"
 
-# --- Streamlit app starts here ---
+# --- App navigation & header content ---
 st.sidebar.title("Health Analytics")
-page = st.sidebar.selectbox("Please select from our bulletproof options", [
-    "Health Risk Analyzer", 
-    "Calorie & Diet Planner", 
-    "Meal Search", 
-    "Health Coach"
-])
-
+page = st.sidebar.radio(
+    "Please, select from our bulletproof options::",
+    ["Health Risk Analyzer", "Calorie & Diet Planner", "Meal Search", "Health Coach", "DEXA Scan"]
+)
+# Top header / marketing content
 top_row = st.container()
 bottom_row = st.container()
 
@@ -352,7 +334,7 @@ with top_row:
     st.markdown("<h1 style='text-align: center;font-size: 4.0rem;'>Comprehensive Health Analytics Platform</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 8, 1])
     with col2:
-        st.image("img_final.png", use_container_width=True)
+        st.image("C:\\Users\\dell\\Downloads\\health_app\\img_final.png", use_container_width=True)
 
     st.markdown("## Welcome to Your Health Analyzer")
     st.markdown("<h3>Track. Understand. Improve.</h3>", unsafe_allow_html=True)
@@ -361,10 +343,24 @@ with top_row:
     st.markdown("<p style='font-size: 1.1em;'>Behind the scenes, our advanced ML Models groups you into meaningful health categories and calculates your body composition and daily calorie needs. With interactive tools for tracking, diet planning, and progress monitoring, everything you need to understand and improve your health is in one place.</p>", unsafe_allow_html=True)
     st.markdown("<h3>Your Health, Made Simple.</h3>", unsafe_allow_html=True)
     st.markdown("<p style='font-size: 1.1em;'>From sleek dashboards to in-depth PDF reports and tailored meal suggestions, our platform turns complex health data into easy, everyday actions. No guesswork, no gimmicks—just the right insights to help you reach your goals.</p>", unsafe_allow_html=True)
-    
     st.markdown("<b>Please, use the sidebar to navigate between sections.</b>", unsafe_allow_html=True)
 
+# Small debug area in sidebar for exceptions (hidden from main UI)
+if "debug_logs" not in st.session_state:
+    st.session_state.debug_logs = []
+
+def log_debug(msg: str):
+    st.session_state.debug_logs.append(msg)
+    # Show last 5 entries in an expander so it's not obtrusive
+    with st.sidebar.expander("Debug logs (last 5)", expanded=False):
+        for e in st.session_state.debug_logs[-5:]:
+            st.markdown(f"- {e}")
+
+# --- Pages implementation ---
 with bottom_row:
+    # ----------------------------
+    # Health Risk Analyzer page
+    # ----------------------------
     if page == "Health Risk Analyzer":
         st.title("Health Risk Analyzer")
         st.markdown("<p style='font-size: 1.1em;'>The app collects key health data such as age, gender, height, weight, daily calories, daily steps, alcohol intake, and smoking status. With a single click on <b>Analyze My Health</b>, it generates personalized health recommendations, displays body composition metrics like body fat %, muscle mass %, and visceral fat level, and presents comparative charts of your daily activity and lifestyle habits. Users can also download a detailed PDF containing their results and tailored advice.</p>", unsafe_allow_html=True)
@@ -380,84 +376,93 @@ with bottom_row:
             analyze = st.form_submit_button("Analyze My Health")
 
         if analyze:
-            bmi = weight / ((height / 100) ** 2)
-            body_fat = (1.2 * bmi) + (0.23 * age) - 10.8 * (1 if gender == "Male" else 0) - 5.4
-            muscle_mass = 100 - body_fat - 15
-            visceral_fat = round((weight / (height / 100)) + (1 if smoker == "Yes" else 0), 1)
+            try:
+                bmi = weight / ((height / 100) ** 2)
+                body_fat = (1.2 * bmi) + (0.23 * age) - 10.8 * (1 if gender == "Male" else 0) - 5.4
+                muscle_mass = 100 - body_fat - 15
+                visceral_fat = round((weight / (height / 100)) + (1 if smoker == "Yes" else 0), 1)
 
-            user_input = {
-                "Age": age,
-                "Gender": gender,
-                "Gender_num": 0 if gender == "Male" else 1,
-                "Height_cm": height,
-                "Weight_kg": weight,
-                "Calories_per_day": calories,
-                "Steps_per_day": steps,
-                "Alcohol_grams_per_day": alcohol,
-                "Smoker": 1 if smoker == "Yes" else 0,
-                "Body_Fat_Percent": round(body_fat, 1),
-                "Muscle_Mass_Percent": round(muscle_mass, 1),
-                "Visceral_Fat_Level": visceral_fat
-            }
+                user_input = {
+                    "Age": age,
+                    "Gender": gender,
+                    "Gender_num": 0 if gender == "Male" else 1,
+                    "Height_cm": height,
+                    "Weight_kg": weight,
+                    "Calories_per_day": calories,
+                    "Steps_per_day": steps,
+                    "Alcohol_grams_per_day": alcohol,
+                    "Smoker": 1 if smoker == "Yes" else 0,
+                    "Body_Fat_Percent": round(body_fat, 1),
+                    "Muscle_Mass_Percent": round(muscle_mass, 1),
+                    "Visceral_Fat_Level": visceral_fat
+                }
 
-            user_df = pd.DataFrame([user_input])
-            user_scaled = scaler.transform(user_df[features])
-            risk_cluster = kmeans.predict(user_scaled)[0]
-            risk = cluster_map[risk_cluster]
+                user_df = pd.DataFrame([user_input])
+                user_scaled = scaler.transform(user_df[features])
+                risk_cluster = kmeans.predict(user_scaled)[0]
+                risk = cluster_map[risk_cluster]
 
-            st.success(f"Your Predicted Health Category: **{risk}**")
+                st.success(f"Your Predicted Health Category: **{risk}**")
 
-            # --- LLM-generated recommendations section (now with Groq) ---
-            st.markdown("### Personalized Recommendations")
-            with st.spinner("Generating personalized advice..."):
-                prompt = (
-                    f"You are a helpful health coach. Provide a detailed, encouraging, and easy-to-understand summary of a user's health status based on the following data, with a predicted health category of '{risk}'. "
-                    f"Offer 3-5 actionable and friendly tips to help them improve their health based on their data. "
-                    f"Do not use bullet points, use a conversational, paragraph-based format."
-                    f"User Data: Age: {age}, Gender: {gender}, Weight: {weight}kg, Height: {height}cm, "
-                    f"Daily Calories: {calories}kcal, Daily Steps: {steps}, "
-                    f"Alcohol Intake: {alcohol}g, Smoking Status: {smoker}. "
-                )
-                try:
-                    chat_completion = client.chat.completions.create(
-                        messages=[{"role": "system", "content": "You are a helpful health coach."}, {"role": "user", "content": prompt}],
-                        model=GROQ_MODEL,
-                        max_tokens=1000,
-                        temperature=0.7,
+                # --- LLM-generated recommendations section (Groq) ---
+                st.markdown("### Personalized Recommendations")
+                with st.spinner("Generating personalized advice..."):
+                    prompt = (
+                        f"You are a helpful health coach. Provide a detailed, encouraging, and easy-to-understand summary of a user's health status based on the following data, with a predicted health category of '{risk}'. "
+                        f"Offer 3-5 actionable and friendly tips to help them improve their health based on their data. "
+                        f"Do not use bullet points, use a conversational, paragraph-based format."
+                        f"User Data: Age: {age}, Gender: {gender}, Weight: {weight}kg, Height: {height}cm, "
+                        f"Daily Calories: {calories}kcal, Daily Steps: {steps}, "
+                        f"Alcohol Intake: {alcohol}g, Smoking Status: {smoker}. "
                     )
-                    response = chat_completion.choices[0].message.content
-                    st.markdown(response)
-                except Exception as e:
-                    st.error(f"Error generating LLM response: {e}")
-                    st.info("Falling back to standard recommendations.")
-                    recommendations = get_recommendations(user_input)
-                    for tip in recommendations:
-                        st.markdown(f"- {tip}")
+                    try:
+                        chat_completion = client.chat.completions.create(
+                            messages=[{"role": "system", "content": "You are a helpful health coach."}, {"role": "user", "content": prompt}],
+                            model=GROQ_MODEL,
+                            max_tokens=1000,
+                            temperature=0.7,
+                        )
+                        response = chat_completion.choices[0].message.content
+                        st.markdown(response)
+                    except Exception as e:
+                        err_text = str(e)
+                        log_debug(f"Health LLM error: {err_text}")
+                        st.error("Error generating LLM response. Showing local recommendations instead.")
+                        recommendations = get_recommendations(user_input)
+                        for tip in recommendations:
+                            st.markdown(f"- {tip}")
 
-            st.markdown("---")
-            st.subheader("Your Body Composition")
-            draw_body_chart(user_input)
-            st.markdown("""
-            **Definitions:**
-            - **Body Fat %**: Percentage of your body that is fat, estimated using BMI, age, and gender.
-            - **Muscle Mass %**: Estimated percentage of your muscle mass.
-            - **Visceral Fat Level**: Fat surrounding your organs, estimated via weight-to-height ratio and smoking status.
-            """)
+                st.markdown("---")
+                st.subheader("Your Body Composition")
+                draw_body_chart(user_input)
+                st.markdown("""
+                **Definitions:**
+                - **Body Fat %**: Percentage of your body that is fat, estimated using BMI, age, and gender.
+                - **Muscle Mass %**: Estimated percentage of your muscle mass.
+                - **Visceral Fat Level**: Fat surrounding your organs, estimated via weight-to-height ratio and smoking status.
+                """)
 
-            st.markdown("---")
-            st.subheader("Daily Activity & Lifestyle Metrics")
-            show_additional_charts(user_input)
-            st.markdown("""
-            **Comparisons:**
-            - Calories/day: Recommended <= 2500 kcal
-            - Steps/day: Recommended >= 7,000 steps
-            - Alcohol intake: Recommended <= 20g/day
-            """)
+                st.markdown("---")
+                st.subheader("Daily Activity & Lifestyle Metrics")
+                show_additional_charts(user_input)
+                st.markdown("""
+                **Comparisons:**
+                - Calories/day: Recommended <= 2500 kcal
+                - Steps/day: Recommended >= 7,000 steps
+                - Alcohol intake: Recommended <= 20g/day
+                """)
 
-            st.markdown("---")
-            st.subheader("Download Your Report")
-            generate_pdf(user_input, risk, get_recommendations(user_input))
+                st.markdown("---")
+                st.subheader("Download Your Report")
+                generate_pdf(user_input, risk, get_recommendations(user_input))
 
+            except Exception as e:
+                log_debug(f"Health Analyzer error: {str(e)}")
+                st.error("An unexpected error occurred while analyzing your health. Please try again or reload the page.")
+
+    # ----------------------------
+    # Calorie & Diet Planner page
+    # ----------------------------
     elif page == "Calorie & Diet Planner":
         st.title("Calorie & Diet Planner")
         st.markdown("<p style='font-size: 1.1em;'>The Calorie & Diet Planner calculates your ideal daily calorie intake and macronutrient breakdown. It then generates a personalized meal plan with exact grams of carbohydrates, protein, and fats for breakfast, lunch, and dinner—making it easy to stay on track and reach your goals.</p>", unsafe_allow_html=True)
@@ -476,87 +481,95 @@ with bottom_row:
                 "Super active (very hard exercise & physical job)"
             ], index=0)
             goal = st.selectbox("Goal", ["Lose Weight", "Maintain Weight", "Gain Weight"], index=0)
-            
             carb_preference = st.selectbox("Diet Type", ["Low Fibre", "Low Carb", "Keto"], index=0)
-            
             submit = st.form_submit_button("Calculate")
 
         if submit:
-            bmr = calculate_bmr(weight, height, age, gender)
-            tdee = calculate_tdee(bmr, activity_level)
-            
-            target_calories = tdee - 500 if goal == "Lose Weight" else tdee + 500 if goal == "Gain Weight" else tdee
+            try:
+                bmr = calculate_bmr(weight, height, age, gender)
+                tdee = calculate_tdee(bmr, activity_level)
+                target_calories = tdee - 500 if goal == "Lose Weight" else tdee + 500 if goal == "Gain Weight" else tdee
 
-            if carb_preference == "Keto":
-                target_protein = (target_calories * 0.25) / 4
-                target_fat = (target_calories * 0.70) / 9
-                target_carbs = (target_calories * 0.05) / 4
-            elif carb_preference == "Low Carb":
-                target_protein = (target_calories * 0.40) / 4
-                target_fat = (target_calories * 0.40) / 9
-                target_carbs = (target_calories * 0.20) / 4
-            else:
-                target_protein = (target_calories * 0.30) / 4
-                target_carbs = (target_calories * 0.40) / 4
-                target_fat = (target_calories * 0.30) / 9
-            
-            st.markdown(f"### Your Estimated Calorie Needs: **{int(target_calories)} kcal/day**")
-            st.markdown(f"**Macro Breakdown:**")
-            st.write(f"- Carbohydrates: {int(target_carbs)} g/day")
-            st.write(f"- Protein: {int(target_protein)} g/day")
-            st.write(f"- Fat: {int(target_fat)} g/day")
-            
-            st.markdown("### **Feel free to choose any of the three diet plans generated below**")
+                if carb_preference == "Keto":
+                    target_protein = (target_calories * 0.25) / 4
+                    target_fat = (target_calories * 0.70) / 9
+                    target_carbs = (target_calories * 0.05) / 4
+                elif carb_preference == "Low Carb":
+                    target_protein = (target_calories * 0.40) / 4
+                    target_fat = (target_calories * 0.40) / 9
+                    target_carbs = (target_calories * 0.20) / 4
+                else:
+                    target_protein = (target_calories * 0.30) / 4
+                    target_carbs = (target_calories * 0.40) / 4
+                    target_fat = (target_calories * 0.30) / 9
 
-            meal_plans = generate_custom_meal_plans(target_calories, target_protein, target_fat, target_carbs)
-            c = 1 
+                st.markdown(f"### Your Estimated Calorie Needs: **{int(target_calories)} kcal/day**")
+                st.markdown(f"**Macro Breakdown:**")
+                st.write(f"- Carbohydrates: {int(target_carbs)} g/day")
+                st.write(f"- Protein: {int(target_protein)} g/day")
+                st.write(f"- Fat: {int(target_fat)} g/day")
 
-            for plan_name, plan_data in meal_plans.items():
-                st.markdown("---")
-                st.markdown(f"### **Diet no. {c}: {plan_name}**")
-                st.markdown(f"**Daily Totals:** {int(target_calories)} kcal | {int(target_protein)} g Protein | {int(target_fat)} g Fat | {int(target_carbs)} g Carbs")
-                for meal_name, meal_info in plan_data.items():
-                    st.markdown(f"#### **{meal_name}**")
-                    st.markdown(f"- **Food:** {meal_info['Food']}")
-                    
-                    meal_p = 0
-                    meal_f = 0
-                    meal_c = 0
-                    meal_cal = 0
-                    
-                    if isinstance(meal_info['Weights'], dict):
-                        for item, weight_str in meal_info['Weights'].items():
-                            food_key = item.lower().replace(' (cooked)', '').replace(' (90/10)', '').replace(' (93/7)', '').replace(' ', '_')
-                            
-                            if food_key == 'large_eggs':
-                                num_eggs = int(weight_str.split()[0])
-                                meal_p += num_eggs * food_db['large_egg']['protein']
-                                meal_f += num_eggs * food_db['large_egg']['fat']
-                                meal_c += num_eggs * food_db['large_egg']['carbs']
-                                meal_cal += num_eggs * food_db['large_egg']['calories']
-                            else:
-                                if weight_str != "N/A":
-                                    weight_g = int(weight_str.split()[0])
-                                    if food_key in food_db:
-                                        meal_p += (food_db[food_key]['protein'] / 100) * weight_g
-                                        meal_f += (food_db[food_key]['fat'] / 100) * weight_g
-                                        meal_c += (food_db[food_key]['carbs'] / 100) * weight_g
-                                        meal_cal += (food_db[food_key]['calories'] / 100) * weight_g
-                    else:
-                        meal_p += food_db['protein_shake']['protein']
-                        meal_f += food_db['protein_shake']['fat']
-                        meal_c += food_db['protein_shake']['carbs']
-                        meal_cal += food_db['protein_shake']['calories']
+                st.markdown("### **Feel free to choose any of the three diet plans generated below**")
+                meal_plans = generate_custom_meal_plans(target_calories, target_protein, target_fat, target_carbs)
+                c = 1
+                for plan_name, plan_data in meal_plans.items():
+                    st.markdown("---")
+                    st.markdown(f"### **Diet no. {c}: {plan_name}**")
+                    st.markdown(f"**Daily Totals:** {int(target_calories)} kcal | {int(target_protein)} g Protein | {int(target_fat)} g Fat | {int(target_carbs)} g Carbs")
+                    for meal_name, meal_info in plan_data.items():
+                        st.markdown(f"#### **{meal_name}**")
+                        st.markdown(f"- **Food:** {meal_info['Food']}")
 
-                    if isinstance(meal_info['Weights'], dict):
-                        for item, weight in meal_info['Weights'].items():
-                            st.markdown(f"   - **{item}:** {weight}")
-                    else:
-                        st.markdown(f"   - **Weights:** {meal_info['Weights']}")
-                    
-                    st.markdown(f"   - **Macros:** {int(meal_cal)} kcal, {int(meal_p)}g P, {int(meal_f)}g F, {int(meal_c)}g C")
-                c = c + 1
+                        meal_p = 0
+                        meal_f = 0
+                        meal_c = 0
+                        meal_cal = 0
 
+                        if isinstance(meal_info['Weights'], dict):
+                            for item, weight_str in meal_info['Weights'].items():
+                                food_key = item.lower().replace(' (cooked)', '').replace(' (90/10)', '').replace(' (93/7)', '').replace(' ', '_')
+                                if food_key == 'large_eggs':
+                                    try:
+                                        num_eggs = int(weight_str.split()[0])
+                                    except Exception:
+                                        num_eggs = 2
+                                    meal_p += num_eggs * food_db['large_egg']['protein']
+                                    meal_f += num_eggs * food_db['large_egg']['fat']
+                                    meal_c += num_eggs * food_db['large_egg']['carbs']
+                                    meal_cal += num_eggs * food_db['large_egg']['calories']
+                                else:
+                                    if weight_str != "N/A":
+                                        try:
+                                            weight_g = int(weight_str.split()[0])
+                                        except Exception:
+                                            weight_g = 100
+                                        if food_key in food_db:
+                                            meal_p += (food_db[food_key]['protein'] / 100) * weight_g
+                                            meal_f += (food_db[food_key]['fat'] / 100) * weight_g
+                                            meal_c += (food_db[food_key]['carbs'] / 100) * weight_g
+                                            meal_cal += (food_db[food_key]['calories'] / 100) * weight_g
+                        else:
+                            meal_p += food_db['protein_shake']['protein']
+                            meal_f += food_db['protein_shake']['fat']
+                            meal_c += food_db['protein_shake']['carbs']
+                            meal_cal += food_db['protein_shake']['calories']
+
+                        if isinstance(meal_info['Weights'], dict):
+                            for item, weight in meal_info['Weights'].items():
+                                st.markdown(f"   - **{item}:** {weight}")
+                        else:
+                            st.markdown(f"   - **Weights:** {meal_info['Weights']}")
+
+                        st.markdown(f"   - **Macros:** {int(meal_cal)} kcal, {int(meal_p)}g P, {int(meal_f)}g F, {int(meal_c)}g C")
+                    c += 1
+
+            except Exception as e:
+                log_debug(f"Calorie Planner error: {str(e)}")
+                st.error("An error occurred while generating your meal plan. Please try again.")
+
+    # ----------------------------
+    # Meal Search page
+    # ----------------------------
     elif page == "Meal Search":
         st.title("Nutrition Meal Search")
         st.markdown("<p style='font-size: 1.1em;'>A powerful food search engine that lets you instantly find nutritional information for thousands of food items. Simply type the name of a food, and you’ll get detailed facts including carbohydrates, protein, fats, calories, and standard serving sizes. Whether you’re tracking macros, planning meals, or just curious about what’s in your food, this tool makes it quick and easy to get accurate, reliable nutrition data at your fingertips.😀</p>", unsafe_allow_html=True)
@@ -573,7 +586,7 @@ with bottom_row:
             payload = {"query": search_query}
 
             try:
-                response = requests.post(NUTRITIONIX_API_URL, json=payload, headers=headers)
+                response = requests.post(NUTRITIONIX_API_URL, json=payload, headers=headers, timeout=15)
                 response.raise_for_status()
                 data = response.json()
                 if "foods" in data and len(data["foods"]) > 0:
@@ -584,16 +597,21 @@ with bottom_row:
                         st.write(f"Fat: {food.get('nf_total_fat', 'N/A')} g")
                         st.write(f"Carbohydrates: {food.get('nf_total_carbohydrate', 'N/A')} g")
                         st.write(f"Serving Size: {food.get('serving_qty', 'N/A')} {food.get('serving_unit', 'N/A')}")
-                        st.image(food.get("photo", {}).get("thumb", ""), use_container_width=True)
+                        if food.get("photo", {}).get("thumb"):
+                            st.image(food.get("photo", {}).get("thumb", ""), use_container_width=True)
                 else:
                     st.warning("No results found. Please try a different food item.")
             except requests.exceptions.RequestException as e:
-                st.error(f"An error occurred while fetching data from the API: {e}")
-                
+                log_debug(f"Nutritionix error: {str(e)}")
+                st.error(f"An error occurred while fetching data from the Nutritionix API: {e}")
+
+    # ----------------------------
+    # Health Coach (chat) page
+    # ----------------------------
     elif page == "Health Coach":
         st.title("Your Personal Health Coach")
         st.markdown("<p style='font-size: 1.1em;'>Interact with a personalized health coach to get answers to your fitness and nutrition questions. Ask about meal plans, exercise routines, or general health advice. Our coach is powered by a large language model and provides helpful, informed responses to guide you on your wellness journey.</p>", unsafe_allow_html=True)
-        
+
         # Initialize chat history
         if "messages" not in st.session_state:
             st.session_state.messages = []
@@ -613,9 +631,12 @@ with bottom_row:
             # Display assistant response in chat message container
             with st.chat_message("assistant"):
                 try:
-                    # Get conversation history for the chat completion request
-                    messages = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-                    
+                    # Build messages from history
+                    messages = []
+                    for m in st.session_state.messages:
+                        if isinstance(m.get("content"), str):
+                            messages.append({"role": m["role"], "content": m["content"]})
+
                     # Make the Groq API call
                     chat_completion = client.chat.completions.create(
                         messages=messages,
@@ -623,15 +644,81 @@ with bottom_row:
                         max_tokens=1000,
                         temperature=0.7,
                     )
-                    
+
                     response_text = chat_completion.choices[0].message.content
                     st.session_state.messages.append({"role": "assistant", "content": response_text})
                     st.markdown(response_text)
 
                 except Exception as e:
-                    st.error(f"Error communicating with the health coach: {e}")
+                    log_debug(f"Health Coach chat error: {str(e)}")
+                    st.error("Error communicating with the health coach. Please try again later.")
                     st.session_state.messages.append({"role": "assistant", "content": "I'm sorry, I'm having trouble connecting right now. Please try again later."})
 
+    # ----------------------------
+    # DEXA Scan Analyzer page (image -> Groq vision model)
+    # ----------------------------
+    elif page == "DEXA Scan":
+        st.title("DEXA Scan Analyzer")
+        st.markdown("Upload your DEXA scan image to get a detailed analysis of your body composition from our AI model.")
 
+        uploaded_image = st.file_uploader("Upload a DEXA scan image", type=["png", "jpg", "jpeg"])
 
+        if uploaded_image:
+            st.image(uploaded_image, caption='Uploaded DEXA Scan', use_container_width=True)
 
+            analyze_button = st.button("Analyze DEXA Scan")
+
+            if analyze_button:
+                with st.spinner("Analyzing your DEXA scan..."):
+                    try:
+                        # Read uploaded image bytes and encode to base64
+                        bytes_data = uploaded_image.getvalue()
+                        if not bytes_data or len(bytes_data) == 0:
+                            st.error("Uploaded file appears empty. Please try a different file.")
+                            log_debug("DEXA image empty or unreadable.")
+                        else:
+                            # Basic size limit check before sending (e.g., 8MB)
+                            if len(bytes_data) > 8 * 1024 * 1024:
+                                st.error("The uploaded image is too large (>8MB). Please upload a smaller file.")
+                                log_debug("DEXA image rejected: >8MB")
+                            else:
+                                base64_image = base64.b64encode(bytes_data).decode("utf-8")
+                                data_url = f"data:{uploaded_image.type};base64,{base64_image}"
+
+                                messages = [
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {"type": "text",
+                                             "text": (
+                                                 "Analyze this DEXA scan image. Provide a detailed report on: "
+                                                 "Body Fat Percentage, Lean Muscle Mass, Bone Mineral Density, "
+                                                 "and other relevant metrics. Then give actionable health recommendations. "
+                                                 "Format results in markdown with clear headings."
+                                             )},
+                                            {"type": "image_url", "image_url": {"url": data_url}}
+                                        ]
+                                    }
+                                ]
+
+                                chat_completion = client.chat.completions.create(
+                                    messages=messages,
+                                    model=GROQ_VISION_MODEL,
+                                    max_tokens=1024,
+                                )
+
+                                response_text = chat_completion.choices[0].message.content
+                                st.markdown("### Based on the DEXA Scan image uploaded, the following are the results. For detailed analysis, concerning diet and workout plans please consult our Health Coach section.")
+                                st.markdown(response_text)
+
+                    except Exception as e:
+                        err_text = str(e)
+                        log_debug(f"DEXA analysis error: {err_text}")
+                        # Friendly user-facing messages based on common issues
+                        if "413" in err_text or "too large" in err_text.lower():
+                            st.error("The uploaded image is too large. Please try with a smaller file.")
+                        elif "unsupported" in err_text.lower() or "format" in err_text.lower():
+                            st.error("Unsupported image format. Please upload a PNG or JPG.")
+                        else: 
+                            st.error("An error occurred while analyzing the image. Please try again later.")
+                        st.info("Ensure the uploaded image is a clear DEXA scan and try again.")
