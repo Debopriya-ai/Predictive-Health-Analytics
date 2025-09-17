@@ -316,8 +316,8 @@ def generate_custom_meal_plans(target_calories, target_protein, target_fat, targ
 
     return plans
 # --- Nutritionix API details (replace with your credentials if needed) ---
-NUTRITIONIX_APP_ID = "0afb1157"
-NUTRITIONIX_API_KEY = "99be0e39954a5b45ecdf7a6399c8379d"
+NUTRITIONIX_APP_ID = st.secrets["N_ID"]
+NUTRITIONIX_API_KEY = st.secrets["N_KY"]
 NUTRITIONIX_API_URL = "https://trackapi.nutritionix.com/v2/natural/nutrients"
 
 # --- App navigation & header content ---
@@ -334,7 +334,7 @@ with top_row:
     st.markdown("<h1 style='text-align: center;font-size: 4.0rem;'>Comprehensive Health Analytics Platform</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 8, 1])
     with col2:
-        st.image("https://github.com/Debopriya-ai/Predictive-Health-Analytics/blob/main/img_final.png", use_container_width=True)
+        st.image("https://raw.githubusercontent.com/Debopriya-ai/Predictive-Health-Analytics/main/img_final.png", use_container_width=True)
 
     st.markdown("## Welcome to Your Health Analyzer")
     st.markdown("<h3>Track. Understand. Improve.</h3>", unsafe_allow_html=True)
@@ -722,5 +722,6 @@ with bottom_row:
                         else: 
                             st.error("An error occurred while analyzing the image. Please try again later.")
                         st.info("Ensure the uploaded image is a clear DEXA scan and try again.")
+
 
 
